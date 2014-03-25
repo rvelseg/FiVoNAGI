@@ -69,8 +69,8 @@ First, clone or download (and decompress) the repository.
 To execute the existing code:
 
 * `cd` to the root directory of the repository
-* execute `make help` and see instructions
 * if you want to see some action before more reading try `make APP=hifu-beam display`
+* execute `make help` and see further instructions
 
 To create new applications:
 
