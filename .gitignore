@@ -1,0 +1,6 @@
+*out
+results/*
+apps/**/FiVoNAGI
+.emacs.desktop
+**~
+patch
