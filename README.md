@@ -20,7 +20,8 @@ uses 2D texture memory and OpenGL display.
 ## Papers
 
 First results of this code have been published as preprint in
-http://arxiv.org/abs/1311.3004 , if you use this code in your research
+http://arxiv.org/abs/1311.3004 , you can find some results of this
+code as videos there. If you use this code in your research
 please cite using
 
 > @article{velasco2013finite,
@@ -102,4 +103,4 @@ facilitate comparison indications like
 > For comparison with CLAWPACK see: path/to/some/clawpack/file.f
 
 have been placed as comments in the corresponding files. Integration
-would be highly desirable for us.
+with this or other FOSS project would be highly desirable for us.
