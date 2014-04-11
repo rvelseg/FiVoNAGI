@@ -4,6 +4,10 @@ Name : Finite Volume Nonlinear Acoustics GPU Implementation (FiVoNAGI)
 
 Authors : Roberto Velasco Segura and Pablo L. Rendón
 
+Affiliations : Grupo de Acústica y Vibraciones, Centro de Ciencias
+Aplicadas y Desarrollo Tecnológico (CCADET), Posgrado en Ciencias
+Físicas (PCF), Universidad Nacional Autónoma de México (UNAM).
+
 Registration numbers: 03-2014-022811451900-01 INDAUTOR México
 
 Source repository : https://github.com/rvelseg/FiVoNAGI
