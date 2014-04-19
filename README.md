@@ -12,6 +12,11 @@ Registration numbers: 03-2014-022811451900-01 INDAUTOR México
 
 Source repository : https://github.com/rvelseg/FiVoNAGI
 
+## Version
+
+This branch (1311.3004) will remain with code as was used for the
+latest version of http://arxiv.org/abs/1311.3004 .
+
 ## Description
 
 This code calculates an approximate solution for nonlinear and
