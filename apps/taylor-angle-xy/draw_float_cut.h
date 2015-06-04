@@ -3,10 +3,13 @@
 
 // taylor-angle-xy
 
+#include <cufft.h>
+
 template <typename TTT>
 __global__ void draw
 (int *MDX, int *MDY, 
  float *draw, 
+ cufftComplex *spectrum,
  TTT *dx, TTT *dy, 
  TTT *dt, TTT *T,
  bool dstOut) {

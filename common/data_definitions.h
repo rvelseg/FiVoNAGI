@@ -6,6 +6,8 @@
 #include "../nv/cpu_anim.h"
 #include "../common/debug_tools.h"
 
+#include <cufft.h>
+
 // in this file the variables allocated in the gpu, and some
 // operations over them, must be defined.
 
@@ -14,7 +16,9 @@
 
 template <typename TTT>
 struct gpu_data {
+
   unsigned char   *output_bitmap;
+
   TTT             *dev_SrcAu1;
   TTT             *dev_SrcAu2;
   TTT             *dev_SrcAu3;
@@ -52,6 +56,8 @@ struct gpu_data {
   float           *dev_draw;
   TTT             *dev_measure1;
 
+  cufftReal       *dev_spectrum;
+
 #if DEBUG == 1
   TTT             *dev_debug1;
   TTT             *dev_debug2;
@@ -65,12 +71,17 @@ struct gpu_data {
   int             *dev_MDX;
   int             *dev_MDY;
 
+  int             *dev_n;
+  int             *dev_frame;
+  int             *dev_n0frame; // first n in the current frame
+
   int             *dev_simError;
   // simError == 0 : everything is fine
   // simError == 1 : dt is too large
   // simError == 2 : there is an imaginary eiganvalue
   // simError == 3 : there is a transonic rarefaction
-  
+  // simError == 4 : something went wrong while collecting data (data_collect)
+
   CPUAnimBitmap   *bitmap;
   
   cudaEvent_t     start;
@@ -436,7 +447,12 @@ void clean_gpu( gpu_data<TTT> *gd ) {
   cudaUnbindTexture( texapdq2 );
   cudaUnbindTexture( texamdq3 );
   cudaUnbindTexture( texapdq3 );
- 
+
+  if(display) {
+    GPUGD_EC( cudaFree( gd->dev_draw ) );
+    GPUGD_EC( cudaFree( gd->output_bitmap ) );
+  }
+
   GPUGD_EC( cudaFree( gd->dev_SrcAu1 ) );
   GPUGD_EC( cudaFree( gd->dev_SrcAu2 ) );
   GPUGD_EC( cudaFree( gd->dev_SrcAu3 ) );
@@ -479,14 +495,25 @@ void clean_gpu( gpu_data<TTT> *gd ) {
   GPUGD_EC( cudaFree( gd->dev_dx ) );
   GPUGD_EC( cudaFree( gd->dev_dy ) );
 
+  GPUGD_EC( cudaFree( gd->dev_T ) );
+  GPUGD_EC( cudaFree( gd->dev_MDX ) );
+  GPUGD_EC( cudaFree( gd->dev_MDY ) );
+
+  GPUGD_EC( cudaFree( gd->dev_n ) );
+  GPUGD_EC( cudaFree( gd->dev_frame ) );
+  GPUGD_EC( cudaFree( gd->dev_n0frame ) );
+
   GPUGD_EC( cudaFree( gd->dev_simError ) );
 
   GPUGD_EC( cudaFree( gd->dev_cfl ) );
-  GPUGD_EC( cudaFree( gd->dev_draw ) );
   GPUGD_EC( cudaFree( gd->dev_measure1 ) );
+
+  GPUGD_EC( cudaFree( gd->dev_spectrum ) );
 
   GPUGD_EC( cudaEventDestroy( gd->start ) );
   GPUGD_EC( cudaEventDestroy( gd->end ) );
+
+  cudaDeviceReset();
 }
 
 
@@ -502,6 +529,8 @@ void gpu_init
  TTT *u1, TTT *u2, TTT *u3,
  GPUGD_VARSFD) {
 
+  int n=0;
+
   cudaEvent_t start;
   cudaEvent_t end;
   GPUGD_EC( cudaEventCreate(&start) );
@@ -515,8 +544,12 @@ void gpu_init
 			gridBitSize ) );
 #endif /* DEBUG */
 
-  GPUGD_EC( cudaMalloc( (void**)&gd->output_bitmap,
-			imageSize ) );
+  if(display) {
+    GPUGD_EC( cudaMalloc( (void**) &gd->output_bitmap,
+			  imageSize ) );
+    GPUGD_EC( cudaMalloc( (void**) &gd->dev_draw, 
+			  drawSize ) );
+  }
 
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_dt, 
 			sizeof(DATATYPEV) ) );
@@ -524,11 +557,19 @@ void gpu_init
 			sizeof(DATATYPEV) ) );
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_dy, 
 			sizeof(DATATYPEV) ) );
+
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_T, 
 			sizeof(DATATYPEV) ) );
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_MDX, 
 			sizeof(int) ) );
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_MDY, 
+			sizeof(int) ) );
+
+  GPUGD_EC( cudaMalloc( (void**) &gd->dev_n, 
+			sizeof(int) ) );
+  GPUGD_EC( cudaMalloc( (void**) &gd->dev_frame, 
+			sizeof(int) ) );
+  GPUGD_EC( cudaMalloc( (void**) &gd->dev_n0frame, 
 			sizeof(int) ) );
 
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_simError, 
@@ -596,10 +637,11 @@ void gpu_init
 
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_cfl, 
 			gridBitSize ) );
-  GPUGD_EC( cudaMalloc( (void**) &gd->dev_draw, 
-			drawSize ) );
   GPUGD_EC( cudaMalloc( (void**) &gd->dev_measure1, 
 			gridBitSize ) );
+
+  GPUGD_EC( cudaMalloc( (void**) &gd->dev_spectrum, 
+			((NX/2)+1) * NY * sizeof(cufftComplex) ) );
 
   cudaChannelFormatDesc desc = cudaCreateChannelDesc<DATATYPET>(); 
 
@@ -735,6 +777,7 @@ void gpu_init
   GPUGD_EC( cudaMemcpy( gd->dev_dy, dy, 
 			sizeof(DATATYPEV), 
 			cudaMemcpyHostToDevice ) );	 
+
   GPUGD_EC( cudaMemcpy( gd->dev_T, T, 
 			sizeof(DATATYPEV), 
 			cudaMemcpyHostToDevice ) );	  
@@ -744,6 +787,10 @@ void gpu_init
   GPUGD_EC( cudaMemcpy( gd->dev_MDY, MDY, 
 			sizeof(int), 
 			cudaMemcpyHostToDevice ) );	  
+
+  GPUGD_EC( cudaMemcpy( gd->dev_n, &n,
+			sizeof(int),
+			cudaMemcpyHostToDevice ) );
 
   GPUGD_EC( cudaMemcpy( gd->dev_SrcAu1, u1, 
 			gridBitSize, 

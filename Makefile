@@ -44,16 +44,18 @@ help : greetings list_apps
 
 apps/%/FiVoNAGI : $(APP_SRC_H) $(APP_SRC_CU)
 	@echo "The following compilation is not for real simulations, it is just for you to test the compilation process. Variables passed with -D are the simplest possible options, maybe not what you need. Configure those variables in the script run.sh inside the application directory and then perform real simulations with 'make APP=appname display' or 'make APP=appname data', a new compilation will be performed for every simulation anyway."
-	cd apps/$*/ && nvcc -D ROOT=${ROOT} -D DEPLOY="$(RESULTS)" -D PRECISION=1 -D CFLW=0.99 -D ETAC=1 -o FiVoNAGI -lcuda -lcudart  -lm -lGL -lGLU -lglut -lpthread -arch=sm_13 ./driver.cu
+	cd apps/$*/ && nvcc -D ROOT=${ROOT} -D DEPLOY="$(RESULTS)" -D PRECISION=1 -D CFLW=0.99 -D ETAC=1 -o FiVoNAGI -lcuda -lcudart  -lm -lGL -lGLU -lglut -lpthread -arch=sm_20 -lcufft ./driver.cu
 
 $(RESULTS)/%/data/flag : 
 	( [ -d $(RESULTS)/$*/data/ ] && echo "Deploy directory found" ) || mkdir -p $(RESULTS)/$*/data
 	touch $(RESULTS)/$*/data/stdout.log
 	touch $(RESULTS)/$*/data/stderr.log
+	@ # http://stackoverflow.com/questions/692000
 	cd apps/$*/ && ./run.sh "${ROOT}" "$(RESULTS)/$*/data" "EXPORT" > >(tee $(RESULTS)/$*/data/stdout.log) 2> >(tee $(RESULTS)/$*/data/stderr.log >&2)
 	@echo "data deploy path: $(RESULTS)/$*/data/"
 	touch $(RESULTS)/$*/data/flag
 
+# TODO: add dependence on gnuplot files, and plot.sh
 $(RESULTS)/%/plots/flag : 
 	[ -d $(RESULTS)/$*/data/ ]
 	( [ -d $(RESULTS)/$*/plots/ ] && echo "Deploy directory found" ) || mkdir -p $(RESULTS)/$*/plots
@@ -63,6 +65,7 @@ $(RESULTS)/%/plots/flag :
 	@echo "plots deploy path: $(RESULTS)/$*/plots/"
 	touch $(RESULTS)/$*/plots/flag
 
+# TODO: add dependence on generating scripts
 $(RESULTS)/%/videos/flag : 
 	[ -d $(RESULTS)/$*/data/ ]
 	( [ -d $(RESULTS)/$*/videos/ ] && echo "Deploy directory found" ) || mkdir -p $(RESULTS)/$*/videos

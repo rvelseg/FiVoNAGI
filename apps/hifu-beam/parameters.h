@@ -30,8 +30,14 @@ static const DATATYPEV YMAX = 12.5*4.0; // in lambda units
 static const DATATYPEV ETA = NX/XMAX;
 
 static const DATATYPEV BETA=4.8;
-// for air DIFFDELTA 0.0000001
 static const DATATYPEV DIFFDELTA=0.0002974;
+
+// display visualization while running
+static const int display = 0;
+
+// perform a FFT on every frame,
+// IN THE CURRENT VERSION THIS IS NOT IMPLEMENTED
+static const int fftFrame = 0;
 
 // stop and ask for a key to continue before the simulation
 static const int initStop = 0;
@@ -47,7 +53,7 @@ static const DATATYPEV DTPRINT = 1.0;
 static const int frameStop = 0;
 
 // Export data to files on every displayed frame
-#ifdef EXPORT // path where the files will be saved
+#ifdef EXPORT 
 static const int frameExport = 1;
 #else
 static const int frameExport = 0;

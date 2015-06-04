@@ -57,6 +57,7 @@ do
 		echo `uname -a`
 		echo `nvcc --version`
 		command="nvcc -D ROOT=${ROOT} -D DEPLOY=${deploy_path} ${EXPORT_STR} -D PRECISION=$pi -D ISPAM=$i -D CFLW=$cfli -D ETAC=$etain -o FiVoNAGI -lcuda -lcudart  -lm -lGL -lGLU -lglut -lpthread -arch=sm_13  ./driver.cu"
+		# +		command="nvcc -D ROOT=${ROOT} -D DEPLOY=${deploy_path} ${EXPORT_STR} -D PRECISION=$pi -D ISPAM=$i -D CFLW=$cfli -D ETAC=$etain -o FiVoNAGI -lcuda -lcudart  -lm -lGL -lGLU -lX11 -lXi -lXmu -lglut -lGLEW -lpthread -arch=sm_13  ./driver.cu"
 		echo $command
 		eval $command || exit 2
 		./FiVoNAGI || exit 3
@@ -71,3 +72,7 @@ do
 	done
     done
 done
+
+# TODO: call
+# python spectrum.py
+

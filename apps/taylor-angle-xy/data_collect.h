@@ -7,8 +7,10 @@ template <typename TTT>
 __global__ void dataCollect
 (TTT *measure1, 
  TTT *T,  TTT *cfl, 
+ int *n,  int *frame, int *n0frame,
  TTT *dx, TTT *dy, 
  int *MDX,  int *MDY,
+ int *simError,
  bool dstOut) {
 
   // since the cfl grid is no longer used, it could be used here
@@ -26,6 +28,18 @@ __global__ void dataCollect
     measure1[offset] = 0.0;
     return;
   } 
+
+  // collect CFL and time
+  // n_f numbers time steps already taken in this frame.
+  int n_f = (*n) - 1 - (*n0frame);
+  if (n_f < NX) {
+    if (i == 0) {
+      measure1[n_f + 0*NX] = (*T);
+      measure1[n_f + 1*NX] = cfl[0]; // CFL value
+    }
+  } else { *simError = 4; return; }
+
+  // collect u1 over a cut in the direction of the propagation
 
   int icenter = static_cast<int>((*T)*MDVX/(*dx))-(*MDX);
   int jcenter = (NY/2) 
@@ -73,13 +87,12 @@ __global__ void dataCollect
 	 - static_cast<int>(5.0*ETA*cos(ISPTHETA)));
 
     if(iwrite >= 0) {
-      measure1[iwrite + 0*NX] = measure_tmp; // numeric solution
-      measure1[iwrite + 1*NX] = ISPRHOA
+      measure1[iwrite + 2*NX] = measure_tmp; // numeric solution
+      measure1[iwrite + 3*NX] = ISPRHOA
 	* tanh(ISPC*(static_cast<float>(i+(*MDX))*(*dx)*cos(ISPTHETA)
 		     + (static_cast<TTT>(j+(*MDY)-NY/2)*(*dy)+MDT*sin(ISPTHETA))
 		     *sin(ISPTHETA)
 		     - (*T))); // analytic solution
-      measure1[0 + 2*NX] = cfl[0]; // CFL value
     }
   }
 }

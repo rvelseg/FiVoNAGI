@@ -4,3 +4,5 @@ apps/**/FiVoNAGI
 .emacs.desktop
 **~
 patch
+/apps/hifu-beam/reference_data/provided/
+/results

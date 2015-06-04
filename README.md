@@ -28,18 +28,13 @@ uses 2D texture memory and OpenGL display.
 
 ## Papers
 
-First results of this code have been published as preprint in
-http://arxiv.org/abs/1311.3004 , you can find some results of this
-code as videos there. If you use this code in your research
-please cite using
+First results of this code have been published in "Wave Motion"
+journal.
 
-> @article{velasco2013finite,
-> 	title={A finite volume approach for the simulation of nonlinear
-> 	dissipative acoustic wave propagation},
-> 	author={Velasco-Segura, Roberto and Rend{\'o}n, Pablo L},
-> 	journal={arXiv preprint arXiv:1311.3004},
-> 	year={2013}
-> 	}
+> R. Velasco-Segura, P. L. Rendón. A finite volume approach for the
+> simulation of nonlinear dissipative acoustic wave
+> propagation. 2015. Wave Motion.
+> http://dx.doi.org/10.1016/j.wavemoti.2015.05.006
 
 ## License
 
@@ -52,7 +47,7 @@ it runs, and how it performs, in different systems:
 
 Hardware
 
-* core i3 processor 
+* core i5 processor 
 * 16 GB RAM
 * 500 GB HDD (dedicated to these simulations)
 * 2.0 GPU CUDA compute capability
@@ -61,14 +56,14 @@ Hardware
 
 Software
 
-* Linux Debian/Sid
-* GNU bash 4.2.45
-* GNU Make 3.81
-* CUDA 5.5.0
-* g++ 4.8.2
-* python 2.7.6
+* Linux Debian/Jessie
+* GNU bash 4.3.30
+* GNU Make 4.0
+* CUDA 6.0.1
+* g++ 4.9.1
+* python 2.7.8
 * gnuplot 4.6
-* pdfTeX 3.1415926-2.5-1.40.14
+* pdfTeX 3.1415926-2.6-1.40.15
 
 Any feedback on performance over different systems is welcome.
 

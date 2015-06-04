@@ -23,15 +23,21 @@ static const DATATYPEV CFLWHISH=CFLW/100.0;
 static const DATATYPEV DTINI=0.005;
 // It's important NX and NY to be powers of 2 for reduction to
 // work properly.
-static const int NX=256*ETAC;
-static const int NY=256*ETAC;
+static const int NX=64*ETAC;
+static const int NY=64*ETAC;
 static const DATATYPEV XMAX = 12.5; 
 static const DATATYPEV YMAX = 12.5; 
 static const DATATYPEV ETA = NX/XMAX;
 
 static const DATATYPEV BETA=1; 
 // for air DIFFDELTA 0.0000001
-static const DATATYPEV DIFFDELTA=0.0001; 
+static const DATATYPEV DIFFDELTA=0.0000001; 
+
+// display visualization while running
+static const int display = 0;
+
+// perform a FFT on every frame
+static const int fftFrame = 0;
 
 // stop and ask for a key to continue before the simulation
 static const int initStop = 0;
@@ -86,7 +92,7 @@ static const int JCUT=NY/2; // not used in this implementation
 static const DATATYPEV MDVX = COS; // domain movement x velocity
 static const DATATYPEV MDVY = SIN; // domain movement y velocity
 static const DATATYPEV MDT = XMAX*0.5/COS; // domain movement starting time 
-static const DATATYPEV TIDE = 4 + (YMAX*0.5-MDT*SIN)*SIN; // time delay: time variable will be initialized as -TIDE
+static const DATATYPEV TIDE = ceil(4 + (YMAX*0.5-MDT*SIN)*SIN); // time delay: time variable will be initialized as -TIDE
 
 
 // Implementation Specific Parameters (ISP)

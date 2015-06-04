@@ -39,9 +39,10 @@
 
 #include ROOT_PATH(/common/numbers.h)
 #include "parameters.h"
-#include "../na/data_definitions.h"
+#include ROOT_PATH(/common/data_definitions.h)
 #include "init.h"
 #include "boundary.h"
+#include ROOT_PATH(/common/filter.h)
 #include "draw_float_cut.h"
 #include "data_export.h"
 #include "data_collect.h"

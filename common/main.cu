@@ -29,6 +29,7 @@
 #include "data_definitions.h"
 #include "init.h"
 #include "boundary.h"
+#include "filter.h"
 #include "draw_float_cut.h"
 #include "data_export.h"
 #include "data_collect.h"
@@ -47,6 +48,7 @@
 #include <math.h>
 #include <time.h> // just for the sleep function
 #include <iomanip>
+#include <cufft.h>
 #endif /* UNINCLUDE */
 
 #ifndef DEBUG
@@ -211,17 +213,28 @@ __global__ void reduceCFL2
 
 template <typename TTT>
 __global__ void update_dt
-(TTT *cfl, TTT *dt, 
+(TTT *cfl, TTT *dt,
+ int *simError,
  GPUGD_VARSFD) {
   TTT cflStep = cfl[0];
-  *dt = (*dt) * CFLWHISH / cflStep;
+  TTT new_dt = (*dt) * CFLWHISH / cflStep;
+
+  // This conditional behaviour is a patch for some executions where
+  // "dt too large" error turns into an infinite loop, indeed new dt
+  // is sometimes (a little) larger that the previous one.
+  if(*simError == 1 && new_dt > (*dt) * 0.9) {
+    *dt = (*dt) * 0.9;
+  } else {
+    *dt = new_dt;
+  }
 }
 
 template <typename TTT>
 __global__ void update_T
-(TTT *dt, TTT *T, 
+(TTT *dt, TTT *T, int *n,
  GPUGD_VARSFD) {
   *T = (*T) + (*dt);
+  *n = (*n) + 1;
 }
 
 void sleepP
@@ -252,6 +265,16 @@ void calcFrame
   
   GPUGD_EC( cudaMemcpy( gd->dev_simError,
 			&simError,
+			sizeof(int),
+			cudaMemcpyHostToDevice ) );
+
+  GPUGD_EC( cudaMemcpy( gd->dev_frame,
+			&frame,
+			sizeof(int),
+			cudaMemcpyHostToDevice ) );
+
+  GPUGD_EC( cudaMemcpy( gd->dev_n0frame,
+			&n,
 			sizeof(int),
 			cudaMemcpyHostToDevice ) );
 
@@ -302,11 +325,11 @@ void calcFrame
     }
 
     // TODO: place this block at the end of the step calculation, and
-    // check calculation is not affected.
+    // check the calculation is not affected.
     GPUGD_EC( cudaMemcpy( &dt,
-    			      gd->dev_dt,
-    			      sizeof(TTT),
-    			      cudaMemcpyDeviceToHost ) );
+			  gd->dev_dt,
+			  sizeof(TTT),
+			  cudaMemcpyDeviceToHost ) );
 
     texCpy<<<blocks,threads>>>
       (gd->dev_SrcCu1, gd->dev_SrcCu2, gd->dev_SrcCu3, 
@@ -508,7 +531,6 @@ void calcFrame
     			      cudaMemcpyDeviceToHost ) );
 
     if ( simError == 0 ) {
-      n++;
 
       source<<<blocks,threads>>>
       	(u1W, u2W, u3W, 
@@ -525,20 +547,28 @@ void calcFrame
 
       // TODO: implement GPUGD_MEASURE 
 
+      // At this point all calculations over u grids for this time
+      // step are done, further processes only use those values.
       update_T<<<1,1>>>
-	(gd->dev_dt, gd->dev_T,
+	(gd->dev_dt, gd->dev_T, gd->dev_n,
 	 GPUGD_VARSFC);
       GPUGD_EC( cudaMemcpy( &T,
 			    gd->dev_T,
 			    sizeof(TTT),
+			    cudaMemcpyDeviceToHost ) );
+      GPUGD_EC( cudaMemcpy( &n,
+			    gd->dev_n,
+			    sizeof(int),
 			    cudaMemcpyDeviceToHost ) );
 
       if(frameExport) { 
 	dataCollect<<<blocks,threads>>>
 	  (gd->dev_measure1, 
 	   gd->dev_T, gd->dev_cfl, 
+	   gd->dev_n, gd->dev_frame, gd->dev_n0frame,
 	   gd->dev_dx, gd->dev_dy,
 	   gd->dev_MDX, gd->dev_MDY,
+	   gd->dev_simError,
 	   !uOut);
       }
 
@@ -561,7 +591,23 @@ void calcFrame
       // to uXW.
       texCpy<<<blocks,threads>>>
       	(u1W, u2W, u3W, uOut);
+
+      GPUGD_EC( cudaMemcpy( &simError,
+			    gd->dev_simError,
+			    sizeof(bool),
+			    cudaMemcpyDeviceToHost ) );
     
+      if ( simError == 4 ) {
+	printf( "ERROR: something went wrong while executing data_collect \n" );
+	clean_gpu(gd);
+	exit(simError);
+      } else if ( simError != 0 ) {
+	printf( "ERROR: something went wrong, simulation error: %d \n",
+		simError );
+	clean_gpu(gd);
+	exit(simError);
+      }
+ 
       // GPUGD_COUT("n", n);
       GPUGD_DISPLAY(DDD,n);
       GPUGD_COUT("dt", dt);
@@ -582,11 +628,12 @@ void calcFrame
       exit(simError);
     }
     update_dt<<<1,1>>>
-      (gd->dev_cfl, gd->dev_dt, 
+      (gd->dev_cfl, gd->dev_dt,
+       gd->dev_simError,	
        GPUGD_VARSFC);
     simError = 0;
   }
-  frame++;
+
   if(frameStop == 1) {
     cout << "Enter 0 to exit or just hit ENTER to continue: "; 
     dummyStop = 1;
@@ -601,32 +648,8 @@ void calcFrame
       exit(0);
     }
   }
+
   Tprint = Tprint + DTPRINT;
-
-  draw<<<blocksd,threads>>>
-    (gd->dev_MDX, gd->dev_MDY, 
-     gd->dev_draw, 
-     gd->dev_dx, gd->dev_dy, 
-     gd->dev_dt, gd->dev_T, 
-     uOut);
-  // GPUGD_COUT("draw, uOut", uOut);
-
-  float_to_color<<<blocksd,threads>>>
-    (gd->output_bitmap, gd->dev_draw);
-  
-  GPUGD_EC( cudaMemcpy( bitmap->get_ptr(),
-  			    gd->output_bitmap,
-  			    bitmap->image_size(),
-  			    cudaMemcpyDeviceToHost ) );
-
-  GPUGD_EC( cudaEventRecord( gd->end, 0 ) );
-  GPUGD_EC( cudaEventSynchronize( gd->end ) );
-  GPUGD_EC( cudaEventElapsedTime( &exec_time_frame,
-				  gd->start, gd->end ) );
-  exec_time_total += exec_time_frame;
-
-  cout << "Execution time per frame = " << exec_time_total/static_cast<float>(frame) << " ms" << endl;
-  cout << "T = " << T << ", n = " << n << ", frame = " << frame << endl;
 
   int MDX, MDY;
   GPUGD_EC( cudaMemcpy( &MDX,
@@ -638,12 +661,82 @@ void calcFrame
 			sizeof(int),
 			cudaMemcpyDeviceToHost ) );
 
-  static int vframe=0;
   if(frameExport) {
     dataExport 
-      (gd->dev_measure1, u1W, u2W, u3W, &vframe, &MDX, &MDY, &T);
-    vframe++;
+      (gd->dev_measure1, 
+       u1W, u2W, u3W,
+       (cufftComplex *)gd->dev_spectrum,
+       &frame, &n, &MDX, &MDY, 
+       &T, 0);
   }
+  // In this vesion of the code fft is not implemented, the following
+  // is experimental code for future versions.
+  // if ( fftFrame ) {
+  //   cufftHandle planR2C;
+  //   cufftPlan2d(&planR2C, NX, NY, CUFFT_R2C);
+  //   cufftExecR2C(planR2C, (cufftReal *)u1W, (cufftComplex *)gd->dev_spectrum);
+  //   cufftDestroy(planR2C);
+  //   if(frameExport) {
+  //     dataExport 
+  // 	(gd->dev_measure1, 
+  // 	 u1W, u2W, u3W,
+  // 	 (cufftComplex *)gd->dev_spectrum,
+  // 	 &frame, &n, &MDX, &MDY, 
+  // 	 &T, 1);
+  //   }
+  //   filter<<<blocks,threads>>>((cufftComplex *)gd->dev_spectrum);
+  //   if(frameExport) {
+  //     dataExport 
+  //   	(gd->dev_measure1, 
+  //   	 u1W, u2W, u3W,
+  //   	 (cufftComplex *)gd->dev_spectrum,
+  //   	 &frame, &n, &MDX, &MDY, 
+  //   	 &T, 2);
+  //   }
+  //   cufftHandle planC2R;
+  //   cufftPlan2d(&planC2R, NX, NY, CUFFT_C2R);
+  //   cufftExecC2R(planC2R, (cufftComplex*)gd->dev_spectrum, (cufftReal*)gd->dev_spectrum);
+  //   cufftDestroy(planC2R);
+  //   if(frameExport) {
+  //     dataExport 
+  //   	(gd->dev_measure1, 
+  //   	 u1W, u2W, u3W,
+  //   	 (cufftComplex *)gd->dev_spectrum,
+  //   	 &frame, &n, &MDX, &MDY, 
+  //   	 &T, 3);
+  //   }
+  // }
+
+  if(display) {
+    draw<<<blocksd,threads>>>
+      (gd->dev_MDX, gd->dev_MDY,
+       gd->dev_draw,
+       (cufftComplex *)gd->dev_spectrum,
+       gd->dev_dx, gd->dev_dy,
+       gd->dev_dt, gd->dev_T,
+       uOut);
+    // GPUGD_COUT("draw, uOut", uOut);
+    
+    float_to_color<<<blocksd,threads>>>
+      (gd->output_bitmap, gd->dev_draw);
+    
+    GPUGD_EC( cudaMemcpy( bitmap->get_ptr(),
+			  gd->output_bitmap,
+			  bitmap->image_size(),
+			  cudaMemcpyDeviceToHost ) );
+  }
+
+  GPUGD_EC( cudaEventRecord( gd->end, 0 ) );
+  GPUGD_EC( cudaEventSynchronize( gd->end ) );
+  GPUGD_EC( cudaEventElapsedTime( &exec_time_frame,
+				  gd->start, gd->end ) );
+  exec_time_total += exec_time_frame;
+
+  // frames are nubered starting in zero.
+  cout << "Execution time per frame = " << exec_time_total/static_cast<float>(frame+1) << " ms" << endl;
+ 
+  cout << "T = " << T << ", n = " << n << ", frame = " << frame << endl;
+
 
   if(finalTime > 0.0 && T > finalTime){
     cout << "final time reached" << endl;
@@ -654,6 +747,8 @@ void calcFrame
     
   GPUGD_PRINT_INT_TOKEN(PRECISION);
   GPUGD_COUT("---------- frame displayed",0);
+
+  frame++;
 
 #if DEBUG >= 1
   free( debug2 );
@@ -666,6 +761,7 @@ int main
   cout << "AMPL = " << AMPL << endl;
   cout << "ETA = "  << ETA  << endl;
   printf("NX = %d :: NY = %d \n", NX, NY);
+  cout << "display = " << display << endl;
 
   GPUGD_PRINT_INT_TOKEN(PRECISION);
   GPUGD_PRINT_STR_TOKEN(DATATYPEV);
@@ -677,17 +773,11 @@ int main
   if (PRECISION == 2) cout << "double" << endl;
 
   gpu_data<DATATYPEV> gd;
-  CPUAnimBitmap bitmap( NXW / ZOOM, (NYW / ZOOM) + 128, &gd );
-  gd.bitmap = &bitmap;
   GPUGD_EC( cudaEventCreate( &gd.start ) );
   GPUGD_EC( cudaEventCreate( &gd.end ) );
   
-  int imageSize = bitmap.image_size();
-  cout << "imageSize = " << imageSize << endl;
   int gridBitSize = NX * NY * sizeof(DATATYPEV);
   cout << "gridBitSize = " << gridBitSize << endl;
-  int drawSize = (NXW/ZOOM)*((NYW/ZOOM)+128)*sizeof(float);
-  cout << "drawSize = " << drawSize << endl;
   
   DATATYPEV *dt = new DATATYPEV;
   DATATYPEV *dx = new DATATYPEV;
@@ -723,32 +813,7 @@ int main
      ,none
 #endif /* DEBUG */
      );
-
-  // gpu memory allocation and initial values copy from cpu to gpu
-  gpu_init
-    (&gd, 
-     gridBitSize, imageSize, drawSize,
-     dt, dx, dy, 
-     T, MDX, MDY, 
-     u1, u2, u3
-#if DEBUG >= 1
-     ,debug1,debug2
-#else
-     ,none
-#endif /* DEBUG */	    
-     );
   
-  delete dt;
-  delete dx;
-  delete dy;
-  delete T; 
-  delete MDX; 
-  delete MDY; 
-
-  free( u1 );
-  free( u2 );
-  free( u3 );
-
 #if DEBUG >= 1
   delete debug1;
   free( debug2 );
@@ -756,9 +821,80 @@ int main
 
   char name[] = "FiVoNAGI";
 
-  bitmap.anim_and_exit( (void (*)(void*,int))calcFrame<DATATYPEV>,
-			(void (*)(void*))clean_gpu<DATATYPEV>,
-			name );
+  if(display) {
+
+    CPUAnimBitmap bitmap( NXW / ZOOM, (NYW / ZOOM) + 128, &gd );
+    gd.bitmap = &bitmap;
+    int imageSize = bitmap.image_size();
+    cout << "imageSize = " << imageSize << endl;
+    int drawSize = (NXW/ZOOM)*((NYW/ZOOM)+128)*sizeof(float);
+    cout << "drawSize = " << drawSize << endl;
+
+    // gpu memory allocation and initial values copy from cpu to gpu
+    gpu_init
+      (&gd, 
+       gridBitSize, imageSize, drawSize,
+       dt, dx, dy, 
+       T, MDX, MDY, 
+       u1, u2, u3
+#if DEBUG >= 1
+       ,debug1,debug2
+#else
+       ,none
+#endif /* DEBUG */	    
+       );
+
+    delete dt;
+    delete dx;
+    delete dy;
+    delete T; 
+    delete MDX; 
+    delete MDY; 
+
+    free( u1 );
+    free( u2 );
+    free( u3 );
+
+    bitmap.anim_and_exit( (void (*)(void*,int))calcFrame<DATATYPEV>,
+			  (void (*)(void*))clean_gpu<DATATYPEV>,
+			  name );
+
+  } else { // no display
+
+    // gpu memory allocation and initial values copy from cpu to gpu
+    gpu_init
+      (&gd, 
+       gridBitSize, 0, 0,
+       dt, dx, dy, 
+       T, MDX, MDY, 
+       u1, u2, u3
+#if DEBUG >= 1
+       ,debug1,debug2
+#else
+       ,none
+#endif /* DEBUG */    
+       );
+
+    delete dt;
+    delete dx;
+    delete dy;
+    delete T; 
+    delete MDX; 
+    delete MDY; 
+
+    free( u1 );
+    free( u2 );
+    free( u3 );
+
+    try {
+      while(1) {
+	calcFrame(&gd,1);
+      }
+    } catch (...) {
+      cout << "An exception occurred." << '\n';
+      clean_gpu(&gd);
+    }
+  }
 }
 
 // The following lines are needed because clean_gpu and calcFrame

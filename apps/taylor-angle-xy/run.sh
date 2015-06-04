@@ -2,7 +2,7 @@
 #
 
 ps=(1 2)
-etas=(20 41 82)
+etas=(5 10 20 41 82)
 angles=(    "0"     "PI/32" "PI/16" "PI/8"  "PI/4") 
 angles_str=("00000" "PIo32" "PIo16" "PIo08" "PIo04")
 cfls=(99 90 80 70 60)
@@ -28,15 +28,21 @@ for pi in "${ps[@]}"
 do
     for etai in "${etas[@]}"
     do
-	if [ "$etai" == 20 ]
+	if [ "$etai" == 5 ]
 	then
 	    etain=1
-	elif [ "$etai" == 41 ]
+	elif [ "$etai" == 10 ]
 	then
 	    etain=2
-	elif [ "$etai" == 82 ]
+	elif [ "$etai" == 20 ]
 	then
 	    etain=4
+	elif [ "$etai" == 41 ]
+	then
+	    etain=8
+	elif [ "$etai" == 82 ]
+	then
+	    etain=16
 	fi
 	for cfli in "${cfls[@]}"
 	do
