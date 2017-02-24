@@ -10,6 +10,8 @@ Físicas (PCF), Universidad Nacional Autónoma de México (UNAM).
 
 Registration numbers: 03-2014-022811451900-01 INDAUTOR México
 
+Funding: PAPIIT IN109214.
+
 Source repository : https://github.com/rvelseg/FiVoNAGI
 
 ## Version
@@ -47,7 +49,7 @@ it runs, and how it performs, in different systems:
 
 Hardware
 
-* core i5 processor 
+* core i5 processor
 * 16 GB RAM
 * 500 GB HDD (dedicated to these simulations)
 * 2.0 GPU CUDA compute capability
