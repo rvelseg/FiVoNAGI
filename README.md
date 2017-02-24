@@ -14,11 +14,6 @@ Funding: PAPIIT IN109214.
 
 Source repository : https://github.com/rvelseg/FiVoNAGI
 
-## Version
-
-This branch (1311.3004) will remain with code as was used for the
-latest version of http://arxiv.org/abs/1311.3004 .
-
 ## Description
 
 This code calculates an approximate solution for nonlinear and
